@@ -8,7 +8,7 @@
     homepage = "https://github.com/ryanplusplus/weblit-playground",
     dependencies = {
       'creationix/weblit@3.0.1',
-      'luvit/luvit@2.14.0'
+      'luvit/luvit@2.14.1'
     },
     files = {
       "**.lua",
