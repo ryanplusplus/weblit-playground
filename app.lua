@@ -1,3 +1,8 @@
+local fs = require 'fs'
+local path = require 'path'
+local timer = require 'timer'
+local spawn = require 'coro-spawn'
+
 local function escape(s)
   local needs_escape = {
     ['-'] = true
@@ -20,15 +25,25 @@ local function multipart(req, res, go)
     local body = req.body:match(boundary .. '(.*)')
 
     for part in body:gmatch('(..-)' .. boundary) do
-      local filename = part:match('filename=([^\r\n]*)')
+      local name = part:match('name="([^";]*)";')
+      local filename = part:match('filename="([^\r\n]*)"')
       local contents = part:match('Content%-Type[^\r\n]*\r\n\r\n' .. '(.*)' .. '\r\n%-%-$')
-      if filename and contents then
-        req.multipart[filename] = contents
+      if name and filename and contents then
+        req.multipart[name] = req.multipart[name] or {}
+        table.insert(req.multipart[name], { filename = filename, contents = contents })
       end
     end
   end
 
   return go()
+end
+
+local function write_to_file(filename, contents)
+  fs.mkdirpSync(path.dirname(filename))
+  local f = io.open(filename, 'w')
+  assert(f, 'Cannot open ' .. filename .. ' for writing')
+  f:write(contents)
+  f:close()
 end
 
 return function(args)
@@ -41,18 +56,30 @@ return function(args)
   app.use(weblit.logger)
   app.use(weblit.autoHeaders)
   app.use(weblit.static('static'))
+  app.use(weblit.static('tmp'))
   app.use(multipart)
 
   app.route({ method = 'POST', path = '/upload' }, function(req, res)
-    p('uploading file')
     p(req.multipart)
-    res.code = 200
-  end)
 
-  app.route({ method = 'POST', path = '/upload-dir' }, function(req, res)
-    p('uploading directory')
-    p(req.multipart)
-    res.code = 200
+    local rand = math.random(1234567890)
+    local dir = path.resolve('tmp/' .. rand)
+    local data
+
+    for _, o in pairs(req.multipart.project) do
+      if o.filename:match(req.multipart.data[1].filename) then
+        data = o.filename
+      end
+      write_to_file(dir .. '/' .. o.filename, o.contents)
+    end
+
+    coroutine.wrap(function()
+      timer.sleep(10000)
+      spawn('rm', { args = { '-rf', dir } })
+    end)()
+
+    res.code = 301
+    res.headers.Location = rand .. '/' .. data
   end)
 
   app.route({ path = '/:name' }, function(req, res)
