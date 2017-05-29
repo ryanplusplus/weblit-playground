@@ -11,7 +11,7 @@ local function escape(s)
 end
 
 local function multipart(req, res, go)
-  if req.headers['Content-Type']:match('^' .. escape('multipart/form-data')) then
+  if (req.headers['Content-Type'] or ''):match('^' .. escape('multipart/form-data')) then
     req.multipart ={}
 
     local boundary = req.headers['Content-Type']:match('boundary=(.*)$')
@@ -21,7 +21,7 @@ local function multipart(req, res, go)
 
     for part in body:gmatch('(..-)' .. boundary) do
       local filename = part:match('filename=([^\r\n]*)')
-      local contents = part:match('application/octet%-stream\r\n\r\n' .. '(.*)' .. '\r\n%-%-$')
+      local contents = part:match('Content%-Type[^\r\n]*\r\n\r\n' .. '(.*)' .. '\r\n%-%-$')
       if filename and contents then
         req.multipart[filename] = contents
       end
